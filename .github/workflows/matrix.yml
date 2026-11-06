@@ -112,10 +112,6 @@ jobs:
         uses: ./.github/actions/backend-check
         with:
           configuration: ${{ matrix.configuration }}
-      - name: Kontrolowany blad Debug
-        if: ${{ matrix.lane == 'debug' }}
-        shell: bash
-        run: exit 1
       - name: Zachowaj raport
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
