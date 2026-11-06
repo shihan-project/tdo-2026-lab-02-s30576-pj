@@ -1,0 +1,100 @@
+name: Inspect CI
+run-name: "Inspect CI / ${{ github.event.workflow_run.id || format('fixture-{0}', inputs.fixture) }}"
+on:
+  workflow_run:
+    workflows: [Mission Control CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Test walidatora na galezi, bez pobierania artefaktu
+        type: choice
+        options: [valid, invalid]
+        default: valid
+permissions:
+  actions: read
+jobs:
+  source:
+    name: Source policy
+    if: ${{ github.event_name == 'workflow_run' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      trusted: ${{ steps.policy.outputs.trusted }}
+    steps:
+      - name: Sprawdz producenta
+        id: policy
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            if (!run || run.conclusion !== 'success' || run.event !== 'push' ||
+                run.head_branch !== 'main' || run.head_repository?.full_name !== repository ||
+                run.name !== 'Mission Control CI') {
+              core.setOutput('trusted', 'false');
+              core.notice(`Pominiety producent: id=${run?.id}, event=${run?.event}, conclusion=${run?.conclusion}`);
+              return;
+            }
+            const {data: workflow} = await github.rest.actions.getWorkflow({...context.repo, workflow_id: 'ci.yml'});
+            if (run.workflow_id !== workflow.id || !/^[0-9a-f]{40}$/.test(run.head_sha) ||
+                !Number.isSafeInteger(run.id) || run.id < 1 ||
+                !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) {
+              throw new Error('Nieprawidlowe pochodzenie metadanych');
+            }
+            core.setOutput('trusted', 'true');
+            core.info(`Zaufany producent: ${run.id}, attempt=${run.run_attempt}, SHA=${run.head_sha}`);
+
+  inspect:
+    name: Inspect artifact
+    needs: source
+    if: ${{ needs.source.outputs.trusted == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Pobierz dane z dokladnego runa
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: ci-metadata-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+          path: received
+      - &validate_metadata
+        name: Sprawdz schemat i zgodnosc
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FIXTURE: ${{ inputs.fixture }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const normal = context.eventName === 'workflow_run';
+            const run = context.payload.workflow_run;
+            const expected = normal
+              ? {schema_version: 1, source_sha: run.head_sha, run_id: String(run.id), run_attempt: run.run_attempt}
+              : {schema_version: 1, source_sha: 'a'.repeat(40), run_id: '123', run_attempt: 1};
+            let data;
+            if (normal) {
+              const path = 'received/ci-metadata.json';
+              if (fs.statSync(path).size > 16384) throw new Error('Za duze metadane');
+              data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            } else {
+              if (context.eventName !== 'workflow_dispatch' || !['valid','invalid'].includes(process.env.FIXTURE)) throw new Error('Nieznany tryb testu');
+              core.notice('Test walidatora na fixture; bez pobierania danych producenta');
+              data = {...expected, schema_version: process.env.FIXTURE === 'invalid' ? 2 : 1};
+            }
+            const keys = ['schema_version','source_sha','run_id','run_attempt'];
+            if (!data || Array.isArray(data) || Object.keys(data).sort().join(',') !== keys.sort().join(',')) throw new Error('Nieprawidlowe pola metadanych');
+            if (data.schema_version !== 1) throw new Error('Nieobslugiwany schemat metadanych');
+            if (typeof data.source_sha !== 'string' || !/^[0-9a-f]{40}$/.test(data.source_sha) ||
+                typeof data.run_id !== 'string' || !/^[1-9][0-9]*$/.test(data.run_id) ||
+                !Number.isSafeInteger(data.run_attempt) || data.run_attempt < 1) throw new Error('Nieprawidlowe typy metadanych');
+            for (const key of keys) {
+              if (data[key] !== expected[key]) throw new Error(`Niezgodne metadane: ${key}`);
+            }
+            core.info(`${normal ? 'Producent' : 'Fixture'}: run=${data.run_id}, attempt=${data.run_attempt}, SHA=${data.source_sha}; schemat zgodny`);
+
+  validator_test:
+    name: Validator self-test
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - *validate_metadata

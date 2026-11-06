@@ -9,3 +9,5 @@ frontend/test-results/
 .env
 .idea/
 .vscode/
+
+/ci-metadata.json

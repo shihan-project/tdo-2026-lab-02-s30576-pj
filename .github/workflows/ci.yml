@@ -270,3 +270,30 @@ jobs:
           }
           check_component backend "$BACKEND_REQUIRED" "$BACKEND_RESULT"
           check_component frontend "$FRONTEND_REQUIRED" "$FRONTEND_RESULT"
+
+  metadata:
+    name: CI metadata
+    needs: gate
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Zapisz metadane producenta
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          PRODUCER_ID: ${{ github.run_id }}
+          PRODUCER_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          data = dict(schema_version=1, source_sha=os.environ['SOURCE_SHA'],
+                      run_id=os.environ['PRODUCER_ID'], run_attempt=int(os.environ['PRODUCER_ATTEMPT']))
+          with open('ci-metadata.json', 'w', encoding='utf-8') as stream:
+              json.dump(data, stream)
+          PY
+      - name: Zachowaj metadane
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-metadata.json
+          retention-days: 7
+          if-no-files-found: error
