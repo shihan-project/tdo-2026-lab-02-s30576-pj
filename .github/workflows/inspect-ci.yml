@@ -29,14 +29,13 @@ jobs:
             const run = context.payload.workflow_run;
             const repository = `${context.repo.owner}/${context.repo.repo}`;
             if (!run || run.conclusion !== 'success' || run.event !== 'push' ||
-                run.head_branch !== 'main' || run.head_repository?.full_name !== repository ||
-                run.name !== 'Mission Control CI') {
+                run.head_branch !== 'main' || run.head_repository?.full_name !== repository) {
               core.setOutput('trusted', 'false');
               core.notice(`Pominiety producent: id=${run?.id}, event=${run?.event}, conclusion=${run?.conclusion}`);
               return;
             }
             const {data: workflow} = await github.rest.actions.getWorkflow({...context.repo, workflow_id: 'ci.yml'});
-            if (run.workflow_id !== workflow.id || !/^[0-9a-f]{40}$/.test(run.head_sha) ||
+            if (workflow.name !== 'Mission Control CI' || run.workflow_id !== workflow.id || !/^[0-9a-f]{40}$/.test(run.head_sha) ||
                 !Number.isSafeInteger(run.id) || run.id < 1 ||
                 !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) {
               throw new Error('Nieprawidlowe pochodzenie metadanych');
