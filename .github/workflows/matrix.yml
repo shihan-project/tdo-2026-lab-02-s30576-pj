@@ -5,13 +5,21 @@ permissions:
   contents: read
 jobs:
   static_tests:
-    name: Static (${{ matrix.configuration }})
+    name: Static (${{ matrix.configuration }}, reports=${{ matrix.collect_reports }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
         configuration: [Debug, Release]
+        collect_reports: [true, false]
+        exclude:
+          - configuration: Debug
+            collect_reports: false
+        include:
+          - configuration: Release
+            collect_reports: true
+            diagnostics: true
     steps:
       - name: Pobierz kod
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -22,19 +30,19 @@ jobs:
         with:
           global-json-file: global.json
           cache: false
+      - name: Diagnostyka
+        if: ${{ matrix.diagnostics == true }}
+        shell: bash
+        run: dotnet --info
       - name: Sprawdz backend
         uses: ./.github/actions/backend-check
         with:
           configuration: ${{ matrix.configuration }}
-      - name: Kontrolowany blad Debug
-        if: ${{ matrix.configuration == 'Debug' }}
-        shell: bash
-        run: exit 1
       - name: Zachowaj raport
-        if: ${{ always() }}
+        if: ${{ always() && matrix.collect_reports }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: static-${{ matrix.configuration }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: static-${{ matrix.configuration }}-${{ matrix.collect_reports }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: TestResults/backend.trx
           retention-days: 7
           if-no-files-found: warn
