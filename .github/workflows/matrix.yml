@@ -26,7 +26,7 @@ jobs:
             const raw = process.env.INCLUDE_DEBUG;
             if (raw !== 'true' && raw !== 'false') throw new Error('Input musi byc true lub false');
             const withDebug = raw === 'true';
-            const plan = {include: [{configuration: 'Preview', lane: 'release'}]};
+            const plan = {include: [{configuration: 'Release', lane: 'release'}]};
             if (withDebug) plan.include.push({configuration: 'Debug', lane: 'debug'});
             const pairs = new Map([['Release', 'release'], ['Debug', 'debug']]);
             if (!Array.isArray(plan.include) || plan.include.length !== (withDebug ? 2 : 1)) {
@@ -112,6 +112,10 @@ jobs:
         uses: ./.github/actions/backend-check
         with:
           configuration: ${{ matrix.configuration }}
+      - name: Kontrolowany blad Debug
+        if: ${{ matrix.lane == 'debug' }}
+        shell: bash
+        run: exit 1
       - name: Zachowaj raport
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
