@@ -1,0 +1,51 @@
+name: Matrix lab
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static_tests:
+    name: Static (${{ matrix.configuration }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Przygotuj .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: false
+      - name: Sprawdz backend
+        uses: ./.github/actions/backend-check
+        with:
+          configuration: ${{ matrix.configuration }}
+      - name: Zachowaj raport
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: static-${{ matrix.configuration }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: TestResults/backend.trx
+          retention-days: 7
+          if-no-files-found: warn
+
+  matrix_summary:
+    name: Matrix summary
+    needs: static_tests
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Sprawdz cala grupe
+        env:
+          STATIC_RESULT: ${{ needs.static_tests.result }}
+        shell: bash
+        run: |
+          printf 'Static: %s\n' "$STATIC_RESULT"
+          test "$STATIC_RESULT" = success
