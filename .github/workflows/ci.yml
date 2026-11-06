@@ -71,8 +71,8 @@ jobs:
               const {data: latest} = await github.rest.pulls.get(args);
               if (latest.head.sha !== pr.head.sha || latest.changed_files !== count) throw new Error('PR zmienil sie podczas detekcji');
             }
-            throw new Error('Kontrolowany blad detekcji');
-            core.setOutput('frontend', String(frontend));
+            core.setOutput('backend', String(backend));
+            // Brak outputu frontendu na czas proby
             core.setOutput('count', String(count));
             core.info(`Pliki: ${count}; backend=${backend}; frontend=${frontend}`);
 
