@@ -274,6 +274,7 @@ jobs:
   metadata:
     name: CI metadata
     needs: gate
+    if: ${{ always() && needs.gate.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions: {}
     steps:
