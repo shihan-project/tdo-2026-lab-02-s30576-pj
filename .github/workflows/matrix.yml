@@ -26,7 +26,7 @@ jobs:
             const raw = process.env.INCLUDE_DEBUG;
             if (raw !== 'true' && raw !== 'false') throw new Error('Input musi byc true lub false');
             const withDebug = raw === 'true';
-            const plan = {include: [{configuration: 'Release', lane: 'release'}]};
+            const plan = {include: [{configuration: 'Preview', lane: 'release'}]};
             if (withDebug) plan.include.push({configuration: 'Debug', lane: 'debug'});
             const pairs = new Map([['Release', 'release'], ['Debug', 'debug']]);
             if (!Array.isArray(plan.include) || plan.include.length !== (withDebug ? 2 : 1)) {
