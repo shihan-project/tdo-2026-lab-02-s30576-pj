@@ -1,17 +1,103 @@
 name: Matrix lab
 on:
   workflow_dispatch:
+    inputs:
+      include-debug:
+        description: Dodaj dynamiczny wariant Debug
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Zbuduj i sprawdz plan
+        id: matrix
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INCLUDE_DEBUG: ${{ inputs['include-debug'] }}
+        with:
+          script: |
+            const raw = process.env.INCLUDE_DEBUG;
+            if (raw !== 'true' && raw !== 'false') throw new Error('Input musi byc true lub false');
+            const withDebug = raw === 'true';
+            const plan = {include: [{configuration: 'Release', lane: 'release'}]};
+            if (withDebug) plan.include.push({configuration: 'Debug', lane: 'debug'});
+            const pairs = new Map([['Release', 'release'], ['Debug', 'debug']]);
+            if (!Array.isArray(plan.include) || plan.include.length !== (withDebug ? 2 : 1)) {
+              throw new Error('Nieprawidlowa liczba wariantow');
+            }
+            const lanes = new Set();
+            for (const entry of plan.include) {
+              if (!entry || Array.isArray(entry) ||
+                  Object.keys(entry).sort().join(',') !== 'configuration,lane' ||
+                  !pairs.has(entry.configuration) || pairs.get(entry.configuration) !== entry.lane ||
+                  lanes.has(entry.lane)) throw new Error('Niedozwolony lub powtorzony wariant planu');
+              lanes.add(entry.lane);
+            }
+            if (!lanes.has('release') || lanes.has('debug') !== withDebug) {
+              throw new Error('Plan nie odpowiada inputowi');
+            }
+            core.info(`Plan: ${JSON.stringify(plan)}`);
+            core.setOutput('matrix', JSON.stringify(plan));
+
   static_tests:
-    name: Static (${{ matrix.configuration }})
+    name: Static (${{ matrix.configuration }}, reports=${{ matrix.collect_reports }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
         configuration: [Debug, Release]
+        collect_reports: [true, false]
+        exclude:
+          - configuration: Debug
+            collect_reports: false
+        include:
+          - configuration: Release
+            collect_reports: true
+            diagnostics: true
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Przygotuj .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: false
+      - name: Diagnostyka
+        if: ${{ matrix.diagnostics == true }}
+        shell: bash
+        run: dotnet --info
+      - name: Sprawdz backend
+        uses: ./.github/actions/backend-check
+        with:
+          configuration: ${{ matrix.configuration }}
+      - name: Zachowaj raport
+        if: ${{ always() && matrix.collect_reports }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: static-${{ matrix.configuration }}-${{ matrix.collect_reports }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: TestResults/backend.trx
+          retention-days: 7
+          if-no-files-found: warn
+
+  dynamic_tests:
+    name: Dynamic (${{ matrix.lane }}, ${{ matrix.configuration }})
+    needs: plan
+    if: ${{ needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - name: Pobierz kod
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,22 +116,27 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: static-${{ matrix.configuration }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: dynamic-${{ matrix.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: TestResults/backend.trx
           retention-days: 7
           if-no-files-found: warn
 
   matrix_summary:
     name: Matrix summary
-    needs: static_tests
+    needs: [plan, static_tests, dynamic_tests]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     permissions: {}
     steps:
       - name: Sprawdz cala grupe
         env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          DYNAMIC_RESULT: ${{ needs.dynamic_tests.result }}
           STATIC_RESULT: ${{ needs.static_tests.result }}
         shell: bash
         run: |
           printf 'Static: %s\n' "$STATIC_RESULT"
+          printf 'Plan: %s, dynamic: %s\n' "$PLAN_RESULT" "$DYNAMIC_RESULT"
+          test "$PLAN_RESULT" = success
           test "$STATIC_RESULT" = success
+          test "$DYNAMIC_RESULT" = success
