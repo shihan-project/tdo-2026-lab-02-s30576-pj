@@ -5,7 +5,7 @@ public sealed record MissionRequest(string Name, string Status, DateOnly? Launch
     public Dictionary<string, string[]> GetValidationErrors()
     {
         var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(Name))
+        if (Name is null)
         {
             errors["name"] = ["Nazwa misji jest wymagana."];
         }
