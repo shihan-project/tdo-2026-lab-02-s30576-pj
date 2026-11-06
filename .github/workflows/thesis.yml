@@ -1,0 +1,177 @@
+name: Thesis PDF
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  compile:
+    name: Compile PDF
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact: ${{ steps.source.outputs.artifact }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Pobierz wlasny dokument
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Potwierdz zrodlowy SHA
+        id: source
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -s thesis/engineer.tex
+          printf 'Zrodlowy SHA: %s\n' "$SOURCE_SHA"
+          printf 'artifact=thesis-pdf-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: Pobierz przypieta klase
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: pantadeusz/pjatk_latex
+          ref: e660b9ee1e637a843c9084774abdc9b3ecdaae4c
+          path: upstream-latex
+          persist-credentials: false
+      - name: Zainstaluj narzedzia TeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y latexmk biber texlive-latex-extra \
+            texlive-bibtex-extra texlive-fonts-recommended \
+            texlive-lang-polish texlive-science
+      - name: Skopiuj niezmieniona klase
+        run: |
+          cp upstream-latex/sprz.cls thesis/sprz.cls
+          cmp -s upstream-latex/sprz.cls thesis/sprz.cls
+      - name: Kompiluj PDF
+        working-directory: thesis
+        run: |
+          rm -f engineer.pdf
+          latexmk -norc -pdf -interaction=nonstopmode -halt-on-error -file-line-error -no-shell-escape engineer.tex
+          test -s engineer.pdf
+          head -c 5 engineer.pdf | grep -q '%PDF-'
+      - name: Zachowaj PDF po udanej kompilacji
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.source.outputs.artifact }}
+          path: thesis/engineer.pdf
+          retention-days: 7
+          if-no-files-found: error
+
+  publication:
+    name: Publication policy
+    needs: compile
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      allowed: ${{ steps.policy.outputs.allowed }}
+    steps:
+      - name: Potwierdz zaufana definicje workflow
+        id: policy
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            core.setOutput('allowed', 'false');
+            const pr = context.payload.pull_request;
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            if (!pr || pr.base.ref !== 'main' || pr.head.repo?.full_name !== repository ||
+                typeof pr.user?.login !== 'string' || pr.user.login === 'dependabot[bot]') {
+              core.notice('Artefakt-only: fork lub niedozwolony autor PR');
+              return;
+            }
+            try {
+              const args = {...context.repo, pull_number: pr.number};
+              const {data: current} = await github.rest.pulls.get(args);
+              if (current.head.sha !== pr.head.sha || current.base.ref !== 'main' ||
+                  !Number.isInteger(current.changed_files) || current.changed_files > 3000) {
+                core.notice('Artefakt-only: niepotwierdzony aktualny zakres PR');
+                return;
+              }
+              const files = await github.paginate(github.rest.pulls.listFiles, {...args, per_page: 100});
+              if (files.length !== current.changed_files || files.some(f => typeof f.filename !== 'string' ||
+                  (f.status === 'renamed' && typeof f.previous_filename !== 'string'))) {
+                core.notice('Artefakt-only: niekompletna lista plikow');
+                return;
+              }
+              if (files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)).some(p => p.startsWith('.github/workflows/'))) {
+                core.notice('Artefakt-only: PR zmienia definicje workflow');
+                return;
+              }
+              async function workflowTree(sha) {
+                const {data: commit} = await github.rest.git.getCommit({...context.repo, commit_sha: sha});
+                const {data: root} = await github.rest.git.getTree({...context.repo, tree_sha: commit.tree.sha});
+                if (root.truncated) return '';
+                const dot = root.tree.find(e => e.path === '.github' && e.type === 'tree');
+                if (!dot) return '';
+                const {data: githubTree} = await github.rest.git.getTree({...context.repo, tree_sha: dot.sha});
+                if (githubTree.truncated) return '';
+                return githubTree.tree.find(e => e.path === 'workflows' && e.type === 'tree')?.sha || '';
+              }
+              const {data: mainRef} = await github.rest.git.getRef({...context.repo, ref: 'heads/main'});
+              const [headTree, mainTree] = await Promise.all([workflowTree(pr.head.sha), workflowTree(mainRef.object.sha)]);
+              if (!headTree || !mainTree || headTree !== mainTree) {
+                core.notice('Artefakt-only: drzewo workflow rozni sie od aktualnego main');
+                return;
+              }
+              core.setOutput('allowed', 'true');
+              core.info(`Drzewo workflow zgodne: ${headTree}`);
+            } catch {
+              core.notice('Artefakt-only: nie udalo sie potwierdzic drzewa workflow');
+            }
+
+  prerelease:
+    name: Publish prerelease
+    needs: [compile, publication]
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && needs.publication.outputs.allowed == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Pobierz gotowy PDF
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.compile.outputs.artifact }}
+          path: received
+      - name: Utworz prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          TAG: thesis-pr-${{ github.event.pull_request.number }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          test -s received/engineer.pdf
+          gh release create "$TAG" 'received/engineer.pdf#Raport PDF' \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "Raport CI - PR $PR_NUMBER" --notes "Zrodlo: $SOURCE_SHA." \
+            --prerelease --latest=false
+
+  release:
+    name: Publish release
+    needs: compile
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Pobierz gotowy PDF
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.compile.outputs.artifact }}
+          path: received
+      - name: Utworz pelne wydanie
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          TAG: thesis-v1.${{ github.run_id }}.${{ github.run_attempt }}
+        run: |
+          test -s received/engineer.pdf
+          gh release create "$TAG" 'received/engineer.pdf#Raport PDF' \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "Raport CI - $TAG" --notes "Zrodlo: $SOURCE_SHA."

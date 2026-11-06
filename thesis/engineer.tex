@@ -1,0 +1,42 @@
+\documentclass{sprz}
+\geometry{margin=25mm}
+\begin{document}
+\chapter*{Raport z laboratorium CI}
+Technologie DevOps, laboratorium 02. Student: s30576.
+
+\section*{Zakres sprawdzenia}
+Mission Control korzysta z .NET 10, Angulara 21 i MySQL.
+CI wykonuje 19 gotowych testów HTTP API oraz 11 testów interfejsu.
+Bazę uruchamia Testcontainers, a frontend korzysta z symulowanych odpowiedzi HTTP.
+
+\section*{Pomiary cache}
+Porównano ręczne uruchomienia na tej samej gałęzi. Klucze zawierały system,
+architekturę, rzeczywistą wersję runtime i hash lockfiles.
+
+\begin{center}
+\begin{tabular}{lrrl}
+\hline
+Próba & npm ci [s] & NuGet [s] & Exact hit \\
+\hline
+Cold & 9 & 6 & nie \\
+Warm & 7 & 4 & tak \\
+Nowe lockfiles & 9 & 6 & nie \\
+Nowy namespace & 7 & 6 & nie \\
+\hline
+\end{tabular}
+\end{center}
+Przy trafieniu cache nadal wykonano instalację, build i testy.
+Zmiana lockfiles oraz namespace spowodowała użycie nowych kluczy.
+
+\section*{Gate i metadane}
+Check \texttt{ci-required} wymaga sukcesu detekcji zmian. Dla flagi
+\texttt{true} dopuszcza wyłącznie wynik \texttt{success}, a dla
+\texttt{false} wynik \texttt{skipped}.
+Regresja walidacji nazwy misji spowodowała dwa nieudane testy i zablokowała PR.
+Błąd detektora, brak flagi i nieoczekiwane pominięcie komponentu również
+zostały odrzucone.
+
+Osobny konsument potwierdził SHA, ID i attempt udanego producenta z main.
+PR oraz anulowany run zostały pominięte, a test walidatora odrzucił schemat
+w wersji 2. Linki do uruchomień są zapisane w dzienniku repozytorium.
+\end{document}
