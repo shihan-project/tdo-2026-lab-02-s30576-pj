@@ -1,0 +1,137 @@
+[
+  {
+    "label": "both",
+    "pr": 21,
+    "sha": "586b7b17f65de3d0d514f8005cabdec6f80ab1cf",
+    "run": 42298904565,
+    "inputs": {
+      "BACKEND_RESULT": "success",
+      "FRONTEND_REQUIRED": "true",
+      "CHANGES_RESULT": "success",
+      "FRONTEND_RESULT": "success",
+      "BACKEND_REQUIRED": "true"
+    },
+    "gate": "success",
+    "mergeState": "CLEAN"
+  },
+  {
+    "label": "zero",
+    "pr": 22,
+    "sha": "5bb23319fa22ec0dd0b63aa3a6ec362c81b18111",
+    "run": 42299333534,
+    "inputs": {
+      "BACKEND_RESULT": "skipped",
+      "BACKEND_REQUIRED": "false",
+      "FRONTEND_RESULT": "skipped",
+      "FRONTEND_REQUIRED": "false",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "success",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "backend",
+    "pr": 22,
+    "sha": "28e9bc982e8f2f07f534ef54155f17cdef32f52b",
+    "run": 42299412336,
+    "inputs": {
+      "BACKEND_RESULT": "success",
+      "BACKEND_REQUIRED": "true",
+      "FRONTEND_RESULT": "skipped",
+      "FRONTEND_REQUIRED": "false",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "success",
+    "mergeState": "CLEAN"
+  },
+  {
+    "label": "frontend",
+    "pr": 22,
+    "sha": "a81c40a21a5f1416cc99107ca3965bbaec52232c",
+    "run": 42299616269,
+    "inputs": {
+      "BACKEND_RESULT": "skipped",
+      "BACKEND_REQUIRED": "false",
+      "FRONTEND_RESULT": "success",
+      "FRONTEND_REQUIRED": "true",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "success",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "regression",
+    "pr": 22,
+    "sha": "50154d34d539b9184aead3d9402eda3f6c356899",
+    "run": 42299768940,
+    "inputs": {
+      "BACKEND_RESULT": "failure",
+      "BACKEND_REQUIRED": "true",
+      "FRONTEND_RESULT": "skipped",
+      "FRONTEND_REQUIRED": "false",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "failure",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "detector-failure",
+    "pr": 22,
+    "sha": "e20ef7ef9e187ba0bee29dc890d58a2e57174485",
+    "run": 42299952227,
+    "inputs": {
+      "BACKEND_RESULT": "skipped",
+      "BACKEND_REQUIRED": "",
+      "FRONTEND_RESULT": "skipped",
+      "FRONTEND_REQUIRED": "",
+      "CHANGES_RESULT": "failure"
+    },
+    "gate": "failure",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "missing-flag",
+    "pr": 22,
+    "sha": "c49e6854b2fe91397d9bd93d972c5c1c2214262a",
+    "run": 42300034695,
+    "inputs": {
+      "BACKEND_RESULT": "success",
+      "BACKEND_REQUIRED": "true",
+      "FRONTEND_RESULT": "skipped",
+      "FRONTEND_REQUIRED": "",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "failure",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "unexpected-skip",
+    "pr": 22,
+    "sha": "fe740215827ad0214578ed327e9fb4027f9b1d23",
+    "run": 42300271809,
+    "inputs": {
+      "BACKEND_RESULT": "skipped",
+      "BACKEND_REQUIRED": "true",
+      "FRONTEND_RESULT": "success",
+      "FRONTEND_REQUIRED": "true",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "failure",
+    "mergeState": "BLOCKED"
+  },
+  {
+    "label": "only-gate-blocked",
+    "pr": 22,
+    "sha": "fe740215827ad0214578ed327e9fb4027f9b1d23",
+    "run": 42300271809,
+    "inputs": {
+      "BACKEND_RESULT": "skipped",
+      "BACKEND_REQUIRED": "true",
+      "FRONTEND_RESULT": "success",
+      "FRONTEND_REQUIRED": "true",
+      "CHANGES_RESULT": "success"
+    },
+    "gate": "failure",
+    "mergeState": "BLOCKED"
+  }
+]
